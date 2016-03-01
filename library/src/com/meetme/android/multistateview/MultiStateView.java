@@ -19,7 +19,7 @@ import android.widget.TextView;
 import java.util.Locale;
 
 /**
- * A view designed to wrap a single child (the "content") and hide/show that content based on the current "state" (see {@link ContentState}) of this
+ * A view designed to wrap a single child (the "content") and hide/show that content based on the current "state" of this
  * View. Note that this layout can only have one direct descendant which is used as the "content" view
  */
 @SuppressWarnings("NullableProblems")
@@ -33,7 +33,7 @@ public class MultiStateView extends FrameLayout {
 
     public static final int CONTENT_STATE_ID_ERROR_GENERAL = 3;
 
-    public final static int MIN_CONTENT_STATE_ID = CONTENT_STATE_ID_ERROR_GENERAL + 1;
+    public static final int MIN_CONTENT_STATE_ID = CONTENT_STATE_ID_ERROR_GENERAL + 1;
 
     private static final String TAG = "MultiStateView";
 
@@ -50,6 +50,38 @@ public class MultiStateView extends FrameLayout {
     private OnClickListener mTapToRetryClickListener;
 
     private SparseArray<StateViewProvider> mProviders;
+
+    private final StateViewProvider mBuiltinProvider = new StateViewProvider() {
+        @Override
+        public View onCreateStateView(Context context, ViewGroup container, int stateViewId) {
+            switch (stateViewId) {
+                case CONTENT_STATE_ID_ERROR_NETWORK:
+                    return getNetworkErrorView();
+
+                case CONTENT_STATE_ID_ERROR_GENERAL:
+                    return getGeneralErrorView();
+
+                case CONTENT_STATE_ID_LOADING:
+                    return getLoadingView();
+
+                case CONTENT_STATE_ID_CONTENT:
+                    return getContentView();
+            }
+
+            return null;
+        }
+
+        @Override
+        public void onBeforeViewShown(int stateViewId, View view) {
+            if (stateViewId == CONTENT_STATE_ID_ERROR_GENERAL) {
+                TextView textView = ((TextView) view.findViewById(R.id.error_title));
+
+                if (textView != null) {
+                    textView.setText(getGeneralErrorTitleString());
+                }
+            }
+        }
+    };
 
     private SparseArray<View> mStateViewCache = new SparseArray<View>();
 
@@ -102,7 +134,11 @@ public class MultiStateView extends FrameLayout {
     }
 
     private void initStateViewProvider() {
-        mProviders = new SparseArray<StateViewProvider>(ContentState.values().length);
+        mProviders = new SparseArray<>();
+        mProviders.put(CONTENT_STATE_ID_CONTENT, mBuiltinProvider);
+        mProviders.put(CONTENT_STATE_ID_LOADING, mBuiltinProvider);
+        mProviders.put(CONTENT_STATE_ID_ERROR_NETWORK, mBuiltinProvider);
+        mProviders.put(CONTENT_STATE_ID_ERROR_GENERAL, mBuiltinProvider);
     }
 
     @TargetApi(Build.VERSION_CODES.ICE_CREAM_SANDWICH)
@@ -110,7 +146,7 @@ public class MultiStateView extends FrameLayout {
     public boolean canScrollVertically(int direction) {
         // This allows us to pass along whether our child is vertically scrollable or not (useful for SwipeRefreshLayout, for example)
         return super.canScrollVertically(direction)
-                || (getState() == ContentState.CONTENT && mContentView != null && mContentView.canScrollVertically(direction));
+                || (mContentView != null && mContentView.canScrollVertically(direction));
     }
 
 
@@ -217,18 +253,6 @@ public class MultiStateView extends FrameLayout {
     }
 
     /**
-     * Configures the view to be in the given state. This method is an internal method used for parsing the native integer value used in attributes
-     * in XML.
-     *
-     * @param nativeInt
-     * @see ContentState
-     * @see #setState(ContentState)
-     */
-    private void setState(int nativeInt) {
-        setState(ContentState.getState(nativeInt));
-    }
-
-    /**
      * Configures the view to be in the given state.
      *
      * @param state
@@ -257,11 +281,10 @@ public class MultiStateView extends FrameLayout {
         }
 
         // Hide the previous state view
-        final ContentState previousState = mViewState.state;
-        View previousView = getStateView(previousState);
+        View previousView = getStateView(mViewState.state);
 
         if (previousView != null) {
-            if (BuildConfig.DEBUG) Log.v(TAG, "Hiding previous state " + previousState);
+            if (BuildConfig.DEBUG) Log.v(TAG, "Hiding previous state " + mViewState.state);
             previousView.setVisibility(View.GONE);
         }
 
@@ -273,14 +296,6 @@ public class MultiStateView extends FrameLayout {
                 addView(newStateView);
             }
 
-            if (state == ContentState.ERROR_GENERAL) {
-                TextView view = ((TextView) newStateView.findViewById(R.id.error_title));
-
-                if (view != null) {
-                    view.setText(getGeneralErrorTitleString());
-                }
-            }
-
             mProviders.get(state).onBeforeViewShown(state, newStateView);
 
             if (BuildConfig.DEBUG) Log.v(TAG, "Showing new state " + state);
@@ -288,52 +303,6 @@ public class MultiStateView extends FrameLayout {
         }
 
         mViewState.state = state;
-
-        if (BuildConfig.DEBUG) {
-            dumpState();
-
-            // Now check if there are multiple visible children and emit a warning if so
-            boolean hasVisible = false;
-
-            for (int i = 0; i < getChildCount(); i++) {
-                View v = getChildAt(i);
-
-                if (v != null && v.getVisibility() != View.GONE) {
-                    // This should not happen
-                    if (hasVisible) Log.w(TAG, "MultiStateView has multiple visible children!");
-                    hasVisible = true;
-                }
-            }
-        }
-    }
-
-    /** Dump the current state of the view. Requires {@link BuildConfig#DEBUG}. */
-    public void dumpState() {
-        if (!BuildConfig.DEBUG) return;
-
-        Log.v(TAG, "/-- Start Dump State ---");
-        Log.v(TAG, "| Current state = " + mViewState.state);
-        Log.v(TAG, "| Children: " + getChildCount());
-
-        for (int i = 0; i < getChildCount(); i++) {
-            View child = getChildAt(i);
-            ContentState state = null;
-
-            if (child == mContentView) {
-                state = ContentState.CONTENT;
-            } else if (child == mGeneralErrorView) {
-                state = ContentState.ERROR_GENERAL;
-            } else if (child == mNetworkErrorView) {
-                state = ContentState.ERROR_NETWORK;
-            } else if (child == mLoadingView) {
-                state = ContentState.LOADING;
-            }
-
-            Log.v(TAG, String.format(Locale.US, "| - #%d: %s (%s) -> %s",
-                    i, child, state, (child != null && child.getVisibility() == View.VISIBLE ? "visible" : "gone")));
-        }
-
-        Log.v(TAG, "\\-- End Dump State ---");
     }
 
     private View getStateView(int stateViewId) {
@@ -444,8 +413,6 @@ public class MultiStateView extends FrameLayout {
      */
     public void setContentView(View contentView) {
         mContentView = contentView;
-
-        setState(mViewState.state);
     }
 
     private boolean isViewInternal(View view) {

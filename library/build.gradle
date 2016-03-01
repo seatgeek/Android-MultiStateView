@@ -1,14 +1,14 @@
 apply plugin: 'com.android.library'
 
 android {
-    buildToolsVersion "23.0.1"
+    buildToolsVersion "23.0.2"
     compileSdkVersion 23
     // Allow publishing both debug and release variants
     publishNonDefault true
 
     defaultConfig {
         targetSdkVersion 22
-        minSdkVersion 3
+        minSdkVersion 7
     }
 
     sourceSets {

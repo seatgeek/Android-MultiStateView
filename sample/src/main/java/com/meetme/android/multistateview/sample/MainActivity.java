@@ -1,16 +1,15 @@
 package com.meetme.android.multistateview.sample;
 
 import android.os.Bundle;
-import android.support.v7.app.ActionBarActivity;
+import android.support.v7.app.AppCompatActivity;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.TextView;
 
 import com.meetme.android.multistateview.MultiStateView;
 
-
-public class MainActivity extends ActionBarActivity {
-    MultiStateView.ContentState mState;
+public class MainActivity extends AppCompatActivity {
+    int mState;
 
     private MultiStateView mMultiStateView;
 
@@ -31,7 +30,7 @@ public class MainActivity extends ActionBarActivity {
     protected void onPostCreate(Bundle savedInstanceState) {
         super.onPostCreate(savedInstanceState);
 
-        mState = mMultiStateView.getState();
+        mState = mMultiStateView.getContentState();
         mExampleOfHowToGetContentView = (TextView) mMultiStateView.getContentView();
     }
 
@@ -41,7 +40,7 @@ public class MainActivity extends ActionBarActivity {
         setStateText(mState);
     }
 
-    private void setStateText(MultiStateView.ContentState state) {
+    private void setStateText(int state) {
         mStateView.setText(String.format("State: %s", state));
     }
 
@@ -62,18 +61,30 @@ public class MainActivity extends ActionBarActivity {
 
         if (id == R.id.action_rotate_state) {
             // This is only done because we're rotating state; you'd typically just call direct to mMultiStateView#setState(ContentState)
-            MultiStateView.ContentState newState = MultiStateView.ContentState.values()[(mState.ordinal() + 1) % MultiStateView.ContentState.values().length];
+            switch (mState) {
+                case MultiStateView.CONTENT_STATE_ID_CONTENT:
+                    setState(MultiStateView.CONTENT_STATE_ID_LOADING);
+                    break;
+                case MultiStateView.CONTENT_STATE_ID_LOADING:
+                    setState(MultiStateView.CONTENT_STATE_ID_ERROR_NETWORK);
+                    break;
+                case MultiStateView.CONTENT_STATE_ID_ERROR_NETWORK:
+                    setState(MultiStateView.CONTENT_STATE_ID_ERROR_GENERAL);
+                    break;
+                case MultiStateView.CONTENT_STATE_ID_ERROR_GENERAL:
+                    setState(MultiStateView.CONTENT_STATE_ID_CONTENT);
+                    break;
+            }
 
-            setState(newState);
             return true;
         }
 
         return super.onOptionsItemSelected(item);
     }
 
-    public void setState(MultiStateView.ContentState state) {
+    public void setState(int state) {
         setStateText(state);
-        mMultiStateView.setState(state);
+        mMultiStateView.setContentState(state);
         mState = state;
     }
 }
